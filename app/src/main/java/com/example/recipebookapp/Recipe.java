@@ -21,6 +21,9 @@ public class Recipe {
         this.encodedimage = encodedimage;
     }
 
+    public Recipe() {
+    }
+
     public Recipe(String recpieName, JSONArray ingredients, String steps, String imagedata) {
         this.name = recpieName;
         this.steps = steps;

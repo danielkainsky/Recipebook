@@ -19,6 +19,12 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -31,7 +37,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 
-public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.OnItemClickListener {
+public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.OnItemClickListener, RecipeAdapter.onDeleteRecipeListener {
     JSONObject jsonObject;
     String currentbook;
     ArrayList<RecipeBook> books;
@@ -76,14 +82,8 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
                         String input = editTextInput.getText().toString();
 
                         jsonObject = new JSONObject();
-                        try {
-                            JSONArray jsonArray = new JSONArray();
-                            jsonArray.put(null);
-                            jsonObject.put(input, jsonArray);
-                        } catch (JSONException e) {
-                            throw new RuntimeException(e);
-                        }
                         saveJsonToFile(input, jsonObject);
+                        alert.dismiss();
                     }
                 })
                 .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -102,28 +102,34 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
         LayoutInflater inflater = getLayoutInflater();
         View manudialogView = inflater.inflate(R.layout.booksmanu_dialog, null);
 
-        books = loadAllJsonObjects(this);
+        getSharedRecipes(new FirebaseCallback() {
+            @Override
+            public void onCallback(JSONObject result) {
+                books = loadAllJsonObjects(MainActivity.this);
+                if (result != null)
+                    books.add(new RecipeBook("shared recipes",result));
+                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+                builder.setView(manudialogView)
+                        .setTitle("chose your book")
+                        .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                dialog.dismiss();
+                            }
+                        });
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setView(manudialogView)
-                .setTitle("chose your book")
-                .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.dismiss();
-                    }
-                });
+                alert = builder.create();
+                alert.show();
 
-        alert = builder.create();
-        alert.show();
-
-        RecyclerView bookrecycler = manudialogView.findViewById(R.id.booksrecyclearview);
-        RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(this);
-        bookrecycler.setLayoutManager(layoutManager);
+                RecyclerView bookrecycler = manudialogView.findViewById(R.id.booksrecyclearview);
+                RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(MainActivity.this);
+                bookrecycler.setLayoutManager(layoutManager);
 
 
-        RecpieBookAdpter recpieBookAdpter = new RecpieBookAdpter(books, this);
-        bookrecycler.setAdapter(recpieBookAdpter);
+                RecpieBookAdpter recpieBookAdpter = new RecpieBookAdpter(books, MainActivity.this);
+                bookrecycler.setAdapter(recpieBookAdpter);
+            }
+        });
 
     }
 
@@ -202,8 +208,7 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
 
         ArrayList<Recipe> recipes1 = new ArrayList<>();
         try {
-            if (book.has(currentbook)) {
-                Log.d("recipe", String.valueOf(book.getJSONArray(currentbook).get(0)));
+            if (book.optJSONArray(currentbook) != null && book.has(currentbook)) {
                 if (book.getJSONArray(currentbook).length() != 0) {
                     for (int i = 0; i < book.getJSONArray(currentbook).length(); i++) {
 
@@ -213,7 +218,7 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
                     recipes.setVisibility(View.VISIBLE);
                     LinearLayoutManager layoutManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
                     recipes.setLayoutManager(layoutManager);
-                    RecipeAdapter recipesAdapter = new RecipeAdapter(recipes1);
+                    RecipeAdapter recipesAdapter = new RecipeAdapter(recipes1,MainActivity.this);
                     recipes.setAdapter(recipesAdapter);
 
                 }
@@ -233,5 +238,115 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
     @Override
     public void onPointerCaptureChanged(boolean hasCapture) {
         super.onPointerCaptureChanged(hasCapture);
+    }
+
+    public interface FirebaseCallback {
+        void onCallback(JSONObject result);
+    }
+
+
+    DatabaseReference databaseReference;
+    public void getSharedRecipes(FirebaseCallback firebaseCallback) {
+        databaseReference = FirebaseDatabase.getInstance().getReference("recipes");
+        databaseReference.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                JSONObject sharedrecipes = new JSONObject();
+                try {
+                    JSONArray sharedRecipesArray = new JSONArray();
+
+                    // Iterate through the recipes node in Firebase
+                    for (DataSnapshot recipeSnapshot : dataSnapshot.getChildren()) {
+                        // Add this recipe object to the sharedRecipes array
+                        sharedRecipesArray.put(recipeSnapshot.getValue(Recipe.class));
+                    }
+
+                    // Add the sharedRecipes array to the main JSONObject
+                    sharedrecipes.put("sharedRecipes", sharedRecipesArray);
+
+                    firebaseCallback.onCallback(sharedrecipes);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            @Override
+            public void onCancelled(DatabaseError databaseError) {
+                // Handle possible errors.
+                System.err.println("Error: " + databaseError.getMessage());
+            }
+        });
+    }
+
+    @Override
+    public void onDeleteRecipe(int postion){
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+
+        // Set the message and title
+        builder.setMessage("Are you sure you want to delete this recipe?")
+                .setTitle("Delete Recipe");
+
+        // Set the positive button for "Yes" to confirm deletion
+        builder.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int id) {
+                // Perform the deletion action here
+                File file = new File(MainActivity.this.getFilesDir(), currentbook);
+                StringBuilder jsonStringBuilder = new StringBuilder();
+
+                try {
+                    // Read existing file content
+                    if (file.exists()) {
+                        FileReader fileReader = new FileReader(file);
+                        BufferedReader bufferedReader = new BufferedReader(fileReader);
+                        String line;
+                        while ((line = bufferedReader.readLine()) != null) {
+                            jsonStringBuilder.append(line);
+                        }
+                        bufferedReader.close();
+                    }
+
+                    // Combine existing content with new JSON object
+                    String existingJsonString = jsonStringBuilder.toString();
+                    JSONObject existingJsonObject;
+                    existingJsonObject = new JSONObject(existingJsonString);
+
+                    // Get or create the JSONArray associated with the given key
+                    JSONArray jsonArray;
+                    jsonArray = existingJsonObject.getJSONArray(currentbook);
+
+                    // Add the new JSON object to the array
+                    jsonArray.remove(postion);
+
+                    // Update the JSON object with the modified array
+                    existingJsonObject.put(currentbook, jsonArray);
+
+                    // Write the updated JSON object back to the file
+                    FileWriter fileWriter = new FileWriter(file);
+                    BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
+                    bufferedWriter.write(existingJsonObject.toString());
+                    bufferedWriter.close();
+
+                } catch (IOException | JSONException e) {
+                    e.printStackTrace();
+                }
+
+            }
+        });
+
+        // Set the negative button for "No" to cancel the action
+        builder.setNegativeButton("No", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int id) {
+                // Dismiss the dialog
+                dialog.dismiss();
+            }
+        });
+
+        // Create and show the AlertDialog
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
+    public void Search(View view){
+
     }
 }

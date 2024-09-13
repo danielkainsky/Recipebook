@@ -9,6 +9,9 @@ public class Ingridiant {
         this.count = count;
     }
 
+    public Ingridiant() {
+    }
+
     public String getIngridiant_name() {
         return ingridiant_name;
     }

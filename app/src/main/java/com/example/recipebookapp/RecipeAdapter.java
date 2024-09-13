@@ -6,6 +6,7 @@ import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -16,9 +17,15 @@ import java.util.ArrayList;
 
 public class RecipeAdapter extends  RecyclerView.Adapter<RecipeAdapter.recipeviewholder>{
     private ArrayList<Recipe> recipes;
+    private onDeleteRecipeListener listener;
 
-    public RecipeAdapter(ArrayList<Recipe> recipes) {
+    public RecipeAdapter(ArrayList<Recipe> recipes,onDeleteRecipeListener listener) {
         this.recipes = recipes;
+        this.listener = listener;
+    }
+
+    public interface onDeleteRecipeListener{
+        void onDeleteRecipe(int postion);
     }
 
     @NonNull
@@ -31,8 +38,13 @@ public class RecipeAdapter extends  RecyclerView.Adapter<RecipeAdapter.recipevie
     @Override
     public void onBindViewHolder(@NonNull recipeviewholder holder, int position) {
         Recipe currentrecipe = this.recipes.get(position);
+        int pos = position;
         holder.recipeview.setText(currentrecipe.toString());
         holder.dishimage.setImageBitmap(base64ToBitmap(currentrecipe.getEncodedimage()));
+        holder.deletebutton.setOnClickListener(view -> {
+                listener.onDeleteRecipe(pos);
+
+        });
     }
 
     @Override
@@ -55,10 +67,12 @@ public class RecipeAdapter extends  RecyclerView.Adapter<RecipeAdapter.recipevie
     public static class recipeviewholder extends RecyclerView.ViewHolder{
         public TextView recipeview;
         public ImageView dishimage;
+        public ImageButton deletebutton;
         public recipeviewholder(@NonNull View itemView) {
             super(itemView);
             this.recipeview = itemView.findViewById(R.id.recipeview);
             this.dishimage  = itemView.findViewById(R.id.dishimage);
+            this.deletebutton = itemView.findViewById(R.id.deletebutton);
         }
     }
 }

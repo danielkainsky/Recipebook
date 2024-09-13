@@ -10,9 +10,11 @@ import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.Switch;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.Nullable;
@@ -22,6 +24,9 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -42,11 +47,12 @@ public class new_recpie extends AppCompatActivity {
     ImageButton imageselector;
     int numofingridants = 0 ;
     String currentbook;
+    FirebaseDatabase database;
     ArrayList<Ingridiant> ingridants = new ArrayList<>();
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
+        //EdgeToEdge.enable(this);
         setContentView(R.layout.activity_new_recpie);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -54,6 +60,8 @@ public class new_recpie extends AppCompatActivity {
             return insets;
         });
         imageselector = findViewById(R.id.imageselctor);
+
+        database = FirebaseDatabase.getInstance();
 
         RecyclerView ingridantview = findViewById(R.id.ingridiants);
         RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(this);
@@ -63,7 +71,6 @@ public class new_recpie extends AppCompatActivity {
         numberinput.addTextChangedListener(new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-                // Not used, but required for the interface
             }
 
             @Override
@@ -77,14 +84,13 @@ public class new_recpie extends AppCompatActivity {
 
                 IngridantAdapter ingridantAdapter = new IngridantAdapter(ingridants);
                 ingridantview.setAdapter(ingridantAdapter);
+                for (int i = 0; i < numofingridants; i++) {
+                    ingridants.add(new Ingridiant("",""));
+                }
             }
 
             @Override
             public void afterTextChanged(Editable s) {
-                for (int i = 0; i < numofingridants; i++) {
-                    ingridants.add(new Ingridiant("",""));
-                }
-
             }
         });
         currentbook = getIntent().getStringExtra("name_of_json");
@@ -94,6 +100,11 @@ public class new_recpie extends AppCompatActivity {
         EditText recpiename = findViewById(R.id.enterrecpiename);
         EditText howtomake = findViewById(R.id.enterhowtomake);
         ImageButton imageButton = findViewById(R.id.imageselctor);
+        Switch localsave = findViewById(R.id.localsave);
+        Switch serversave = findViewById(R.id.serversave);
+        boolean localy = localsave.isChecked();
+        boolean server = serversave.isChecked();
+        Log.d("firebase", ""+server);
         Drawable   drawable = imageButton.getDrawable();
         Bitmap bit = ((BitmapDrawable) drawable).getBitmap();
         String encodedimage = bitmapToBase64(bit);
@@ -113,7 +124,15 @@ public class new_recpie extends AppCompatActivity {
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
-        saveOrUpdateJsonToFile(currentbook,recipe);
+        if (localy) {
+            saveOrUpdateJsonToFile(currentbook, recipe);
+            Log.d("firebase", "local: ");
+        }
+        if (server){
+            Log.d("firebase", "server: ");
+            DatabaseReference myRef = database.getReference("Recipes").push();
+            myRef.setValue(recipe);
+        }
         Intent i = new Intent(this,MainActivity.class);
         startActivity(i);
     }
