@@ -9,6 +9,11 @@
         android:id="@+id/editbookname"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/custom_input"
+        android:paddingStart="25dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="12dp"
+        android:paddingTop="12dp"
         android:hint="Enter the book name" />
 
 </LinearLayout>

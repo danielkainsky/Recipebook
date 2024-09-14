@@ -40,6 +40,9 @@ import java.io.FileWriter;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 
 public class new_recpie extends AppCompatActivity {
     private static final int PICK_IMAGE_REQUEST = 1;
@@ -47,10 +50,12 @@ public class new_recpie extends AppCompatActivity {
     ImageButton imageselector;
     int numofingridants = 0 ;
     String currentbook;
+    Switch localsave;
     FirebaseDatabase database;
     ArrayList<Ingridiant> ingridants = new ArrayList<>();
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         super.onCreate(savedInstanceState);
         //EdgeToEdge.enable(this);
         setContentView(R.layout.activity_new_recpie);
@@ -61,7 +66,7 @@ public class new_recpie extends AppCompatActivity {
         });
         imageselector = findViewById(R.id.imageselctor);
 
-        database = FirebaseDatabase.getInstance();
+        localsave = findViewById(R.id.localsave);
 
         RecyclerView ingridantview = findViewById(R.id.ingridiants);
         RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(this);
@@ -76,6 +81,7 @@ public class new_recpie extends AppCompatActivity {
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 // Update the TextView when the text changes
+                ingridants.clear();
                 if (!s.toString().isEmpty()) {
                     numofingridants = Integer.parseInt(s.toString());
                 } else {
@@ -94,23 +100,23 @@ public class new_recpie extends AppCompatActivity {
             }
         });
         currentbook = getIntent().getStringExtra("name_of_json");
+        if (currentbook.equals("shared recipes"))
+            localsave.setVisibility(View.GONE);
 
     }
     public void onSubmit(View view){
         EditText recpiename = findViewById(R.id.enterrecpiename);
         EditText howtomake = findViewById(R.id.enterhowtomake);
         ImageButton imageButton = findViewById(R.id.imageselctor);
-        Switch localsave = findViewById(R.id.localsave);
         Switch serversave = findViewById(R.id.serversave);
         boolean localy = localsave.isChecked();
         boolean server = serversave.isChecked();
-        Log.d("firebase", ""+server);
         Drawable   drawable = imageButton.getDrawable();
         Bitmap bit = ((BitmapDrawable) drawable).getBitmap();
         String encodedimage = bitmapToBase64(bit);
         JSONObject recipe = new JSONObject();
         try {
-            recipe.put("recpie_name",recpiename.getText());
+            recipe.put("recpie_name",recpiename.getText().toString());
             JSONArray ingredients = new JSONArray();
             for (int i = 0; i < ingridants.size(); i++) {
                 JSONObject ing = new JSONObject();
@@ -119,8 +125,9 @@ public class new_recpie extends AppCompatActivity {
                 ingredients.put(ing);
             }
             recipe.put("ingredients",ingredients);
-            recipe.put("steps",howtomake.getText());
+            recipe.put("steps",howtomake.getText().toString());
             recipe.put("imagedata",encodedimage);
+            recipe.put("isliked",false);
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
@@ -129,12 +136,16 @@ public class new_recpie extends AppCompatActivity {
             Log.d("firebase", "local: ");
         }
         if (server){
+            database = FirebaseDatabase.getInstance();
+            Recipe recipe1 = new Recipe(recpiename.getText().toString(),ingridants,howtomake.getText().toString(),encodedimage);
             Log.d("firebase", "server: ");
-            DatabaseReference myRef = database.getReference("Recipes").push();
-            myRef.setValue(recipe);
+            DatabaseReference myRef1 = database.getReference("recipes").push();
+            myRef1.setValue(recipe1);
+            Intent i = new Intent(this,MainActivity.class);
+            startActivity(i);
         }
-        Intent i = new Intent(this,MainActivity.class);
-        startActivity(i);
+        else  {Intent i = new Intent(this,MainActivity.class);
+        startActivity(i);}
     }
     public void openImageChooser(View view) {
         Intent intent = new Intent();
@@ -218,6 +229,5 @@ public class new_recpie extends AppCompatActivity {
             e.printStackTrace();
         }
     }
-
 
 }

@@ -13,12 +13,14 @@ public class Recipe {
     private ArrayList<Ingridiant> ingridiants;
     private String steps;
     private  String encodedimage;
+    private boolean liked;
 
     public Recipe(String name, ArrayList<Ingridiant> ingridiants, String steps, String encodedimage) {
         this.name = name;
         this.ingridiants = ingridiants;
         this.steps = steps;
         this.encodedimage = encodedimage;
+        this.liked = false;
     }
 
     public Recipe() {
@@ -34,6 +36,34 @@ public class Recipe {
                 JSONObject ing = (JSONObject) ingredients.get(i);
                 this.ingridiants.add(new Ingridiant(ing.getString("ingridiant_name"),ing.getString("ingridiant_count")));
             }
+        } catch (JSONException e) {
+            throw new RuntimeException(e);
+        }
+        this.liked = false;
+    }
+
+    public boolean isLiked() {
+        return liked;
+    }
+
+    public void setLiked(boolean liked) {
+        this.liked = liked;
+    }
+
+
+    public Recipe(JSONObject jsonObject){
+        try {
+            this.name = jsonObject.getString("recpie_name");
+            this.steps = jsonObject.getString("steps");
+            this.encodedimage = jsonObject.getString("imagedata");
+            this.ingridiants = new ArrayList<>();
+            for (int i = 0; i < jsonObject.getJSONArray("ingredients").length(); i++) {
+                JSONObject ing = (JSONObject) jsonObject.getJSONArray("ingredients").get(i);
+                this.ingridiants.add(new Ingridiant(ing.getString("ingridiant_name"),ing.getString("ingridiant_count")));
+            }
+            if (jsonObject.has("isliked"))
+                this.liked = jsonObject.getBoolean("isliked");
+            else this.liked = false;
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
@@ -82,8 +112,14 @@ public class Recipe {
     }
     @Override
     public String toString() {
-        return "Recipe name: " + this.name + "\n"+
-                "ingredients: " + IngToString() + "\n"+
+        return
+                "ingredients: " + IngToString() + "\n"+ "\n"+ "\n"+
                 "steps: " + steps;
+    }
+
+    public void onChangeLike(){
+        if (this.liked)
+            this.liked = false;
+        else this.liked = true;
     }
 }

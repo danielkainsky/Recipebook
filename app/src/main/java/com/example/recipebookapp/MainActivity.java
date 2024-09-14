@@ -9,6 +9,9 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AlertDialog;
@@ -37,7 +40,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 
-public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.OnItemClickListener, RecipeAdapter.onDeleteRecipeListener {
+public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.OnItemClickListener, RecipeAdapter.onDeleteRecipeListener, RecipeAdapter.onLikeClickedListener {
     JSONObject jsonObject;
     String currentbook;
     ArrayList<RecipeBook> books;
@@ -46,6 +49,7 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        getWindow().getDecorView().setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
@@ -97,35 +101,45 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
         alert2.show();
 
     }
+    boolean hasshared = false;
     AlertDialog alert;
     public void onOpenBooks(View view) {
         LayoutInflater inflater = getLayoutInflater();
         View manudialogView = inflater.inflate(R.layout.booksmanu_dialog, null);
 
+        books = loadAllJsonObjects(MainActivity.this);
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        builder.setView(manudialogView)
+                .setTitle("chose your book")
+                .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+
+        alert = builder.create();
+        alert.show();
+
+        RecyclerView bookrecycler = manudialogView.findViewById(R.id.booksrecyclearview);
+        RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(MainActivity.this);
+        bookrecycler.setLayoutManager(layoutManager);
+
+
+        RecpieBookAdpter recpieBookAdpter = new RecpieBookAdpter(books, MainActivity.this);
+        bookrecycler.setAdapter(recpieBookAdpter);
+
         getSharedRecipes(new FirebaseCallback() {
             @Override
             public void onCallback(JSONObject result) {
-                books = loadAllJsonObjects(MainActivity.this);
-                if (result != null)
-                    books.add(new RecipeBook("shared recipes",result));
-                AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-                builder.setView(manudialogView)
-                        .setTitle("chose your book")
-                        .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                dialog.dismiss();
-                            }
-                        });
+                if (result != null && !hasshared) {
+                    for (int i = 0; i < books.size(); i++)
+                        if (books.get(i).getName().equals("shared recipes"))
+                            books.remove(i);
 
-                alert = builder.create();
-                alert.show();
-
-                RecyclerView bookrecycler = manudialogView.findViewById(R.id.booksrecyclearview);
-                RecyclerView.LayoutManager layoutManager = new LinearLayoutManager(MainActivity.this);
-                bookrecycler.setLayoutManager(layoutManager);
-
-
+                    books.add(new RecipeBook("shared recipes", result));
+                    hasshared = true;
+                }
                 RecpieBookAdpter recpieBookAdpter = new RecpieBookAdpter(books, MainActivity.this);
                 bookrecycler.setAdapter(recpieBookAdpter);
             }
@@ -198,6 +212,9 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
         }
         return books;
     }
+
+    RecipeAdapter recipesAdapter;
+    ArrayList<Recipe> recipes1;
     // Implement the onItemClick method from the interface
     @Override
     public void onItemClick(int position) {
@@ -205,20 +222,24 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
         alert.dismiss();
         currentbook = books.get(position).getName();
         JSONObject book = books.get(position).getJson();
+        TextView namebook = findViewById(R.id.namebook);
+        namebook.setText(currentbook);
 
-        ArrayList<Recipe> recipes1 = new ArrayList<>();
+        recipes1 = new ArrayList<>();
         try {
             if (book.optJSONArray(currentbook) != null && book.has(currentbook)) {
+
                 if (book.getJSONArray(currentbook).length() != 0) {
                     for (int i = 0; i < book.getJSONArray(currentbook).length(); i++) {
 
                         JSONObject jsonObject1 = book.getJSONArray(currentbook).getJSONObject(i);
-                        recipes1.add(new Recipe(jsonObject1.getString("recpie_name"), jsonObject1.getJSONArray("ingredients"), jsonObject1.getString("steps"), jsonObject1.getString("imagedata")));
+                        recipes1.add(new Recipe(jsonObject1));
+
                     }
                     recipes.setVisibility(View.VISIBLE);
                     LinearLayoutManager layoutManager = new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false);
                     recipes.setLayoutManager(layoutManager);
-                    RecipeAdapter recipesAdapter = new RecipeAdapter(recipes1,MainActivity.this);
+                    recipesAdapter = new RecipeAdapter(recipes1,MainActivity.this,MainActivity.this,MainActivity.this);
                     recipes.setAdapter(recipesAdapter);
 
                 }
@@ -258,12 +279,16 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
                     // Iterate through the recipes node in Firebase
                     for (DataSnapshot recipeSnapshot : dataSnapshot.getChildren()) {
                         // Add this recipe object to the sharedRecipes array
-                        sharedRecipesArray.put(recipeSnapshot.getValue(Recipe.class));
+                        Recipe recipe = recipeSnapshot.getValue(Recipe.class);
+                        Log.d("firebase", recipe.toString());
+                        JSONObject recipejson = RecipetoJson(recipe);
+                        sharedRecipesArray.put(recipejson);
                     }
 
                     // Add the sharedRecipes array to the main JSONObject
-                    sharedrecipes.put("sharedRecipes", sharedRecipesArray);
+                    sharedrecipes.put("shared recipes", sharedRecipesArray);
 
+                    hasshared = false;
                     firebaseCallback.onCallback(sharedrecipes);
                 } catch (JSONException e) {
                     e.printStackTrace();
@@ -278,10 +303,34 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
         });
     }
 
+    public JSONObject RecipetoJson(Recipe recipe){
+        JSONObject recipejson = new JSONObject();
+        try {
+            recipejson.put("recpie_name", recipe.getName());
+            JSONArray ingredients = new JSONArray();
+            for (int i = 0; i < recipe.getIngridiants().size(); i++) {
+                JSONObject ing = new JSONObject();
+                ing.put("ingridiant_name", recipe.getIngridiants().get(i).getIngridiant_name());
+                ing.put("ingridiant_count", recipe.getIngridiants().get(i).getCount());
+                ingredients.put(ing);
+            }
+            recipejson.put("ingredients", ingredients);
+            recipejson.put("steps", recipe.getSteps());
+            recipejson.put("imagedata", recipe.getEncodedimage());
+        } catch (JSONException e) {
+            throw new RuntimeException(e);
+        }
+        return recipejson;
+    }
+
     @Override
     public void onDeleteRecipe(int postion){
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        if (currentbook.equals("shared recipes")){
+            Toast.makeText(this, "You can't delete a shared recipe, genius.", Toast.LENGTH_LONG).show();
+            return;
+        }
 
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
         // Set the message and title
         builder.setMessage("Are you sure you want to delete this recipe?")
                 .setTitle("Delete Recipe");
@@ -316,7 +365,7 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
 
                     // Add the new JSON object to the array
                     jsonArray.remove(postion);
-
+                    recipes1.remove(postion);
                     // Update the JSON object with the modified array
                     existingJsonObject.put(currentbook, jsonArray);
 
@@ -346,7 +395,192 @@ public class MainActivity extends AppCompatActivity implements RecpieBookAdpter.
         dialog.show();
     }
 
-    public void Search(View view){
+    @Override
+    public void onLikeClicked(int postion){
+        recipes1.get(postion).onChangeLike();
+        if (recipes1.get(postion).isLiked()){
+            //put into the favorite book
+            saveOrUpdateJsonToFile("favorites", RecipetoJson(recipes1.get(postion)));
+        }
+        else {
+            //remove from the favorite book
+            File file = new File(MainActivity.this.getFilesDir(), "favorites");
+            StringBuilder jsonStringBuilder = new StringBuilder();
 
+            try {
+                // Read existing file content
+                if (file.exists()) {
+                    FileReader fileReader = new FileReader(file);
+                    BufferedReader bufferedReader = new BufferedReader(fileReader);
+                    String line;
+                    while ((line = bufferedReader.readLine()) != null) {
+                        jsonStringBuilder.append(line);
+                    }
+                    bufferedReader.close();
+                }
+
+                // Combine existing content with new JSON object
+                String existingJsonString = jsonStringBuilder.toString();
+                JSONObject existingJsonObject;
+                existingJsonObject = new JSONObject(existingJsonString);
+
+                // Get or create the JSONArray associated with the given key
+                JSONArray jsonArray;
+                jsonArray = existingJsonObject.getJSONArray("favorites");
+
+                // Add the new JSON object to the array
+                jsonArray.remove(postion);
+                // Update the JSON object with the modified array
+                existingJsonObject.put("favorites", jsonArray);
+
+                // Write the updated JSON object back to the file
+                FileWriter fileWriter = new FileWriter(file);
+                BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
+                bufferedWriter.write(existingJsonObject.toString());
+                bufferedWriter.close();
+
+            } catch (IOException | JSONException e) {
+                e.printStackTrace();
+            }
+
+        }
+
+    }
+
+    ArrayList<Recipe> searchresult = new ArrayList<>();
+    public void Search(View view){
+        searchresult.clear();
+        LayoutInflater inflater = getLayoutInflater();
+        View manudialogView = inflater.inflate(R.layout.searchbox, null);
+
+        books = loadAllJsonObjects(MainActivity.this);
+        AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+        builder.setView(manudialogView)
+                .setTitle("search for...")
+                .setPositiveButton("Submit", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        EditText editTextInput = manudialogView.findViewById(R.id.searchedittext);
+                        Switch ingredientswitch = manudialogView.findViewById(R.id.ingredientswitch);
+                        Switch recipeswitch = manudialogView.findViewById(R.id.recipeswitch);
+                        String input = editTextInput.getText().toString();
+                        try {
+                            if (ingredientswitch.isChecked() && !recipeswitch.isChecked()) {
+                                for (int i = 0; i < books.size(); i++) {
+                                    if (books.get(i).getJson().has(books.get(i).getName())){
+                                        JSONArray searchedbook = books.get(i).getJson().getJSONArray(books.get(i).getName());
+                                        if (searchedbook != null) {
+                                            for (int j = 0; j < searchedbook.length(); j++) {
+                                                JSONObject recipeObject = searchedbook.optJSONObject(j); // Use optJSONObject to avoid exceptions
+                                                if (recipeObject != null) {
+                                                    JSONArray ingredientsArray = recipeObject.optJSONArray("ingredients");
+                                                    if (ingredientsArray != null) {
+                                                        for (int k = 0; k < ingredientsArray.length(); k++) {
+                                                            JSONObject ingredientObject = ingredientsArray.optJSONObject(k); // Handle potential nulls
+                                                            if (ingredientObject != null) {
+                                                                String ingredientName = ingredientObject.optString("ingridiant_name");
+                                                                if (ingredientName != null && ingredientName.equals(input)) {
+                                                                    searchresult.add(new Recipe(recipeObject));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            if (recipeswitch.isChecked()) {
+                                for (int i = 0; i < books.size(); i++) {
+                                    if (books.get(i).getJson().has(books.get(i).getName())) {
+                                        JSONArray searchedbook = books.get(i).getJson().optJSONArray(books.get(i).getName());
+                                        if (searchedbook != null) {
+                                            for (int j = 0; j < searchedbook.length(); j++) {
+                                                JSONObject recipeObject = searchedbook.optJSONObject(j);
+                                                if (recipeObject != null) {
+                                                    String recipeName = recipeObject.optString("recpie_name", null);
+                                                    if (recipeName != null && recipeName.toLowerCase().contains(input.toLowerCase())) {
+                                                        searchresult.add(new Recipe(recipeObject));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (JSONException e) {
+                            throw new RuntimeException(e);
+                        }
+
+                        recipes.setVisibility(View.VISIBLE);
+                        LinearLayoutManager layoutManager = new LinearLayoutManager(MainActivity.this, LinearLayoutManager.HORIZONTAL, false);
+                        recipes.setLayoutManager(layoutManager);
+                        RecipeAdapter recipesAdapter = new RecipeAdapter(searchresult,MainActivity.this,MainActivity.this,MainActivity.this);
+                        recipes.setAdapter(recipesAdapter);
+
+                        alert.dismiss();
+                    }
+                })
+                .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+
+        alert = builder.create();
+        alert.show();
+
+    }
+
+    public void saveOrUpdateJsonToFile(String fileName, JSONObject newJsonObject) {
+        File file = new File(this.getFilesDir(), fileName);
+        StringBuilder jsonStringBuilder = new StringBuilder();
+
+        try {
+            // Read existing file content
+            if (file.exists()) {
+                FileReader fileReader = new FileReader(file);
+                BufferedReader bufferedReader = new BufferedReader(fileReader);
+                String line;
+                while ((line = bufferedReader.readLine()) != null) {
+                    jsonStringBuilder.append(line);
+                }
+                bufferedReader.close();
+            }
+
+            // Combine existing content with new JSON object
+            String existingJsonString = jsonStringBuilder.toString();
+            JSONObject existingJsonObject;
+            if (!existingJsonString.isEmpty()) {
+                existingJsonObject = new JSONObject(existingJsonString);
+            } else {
+                existingJsonObject = new JSONObject();
+            }
+
+            // Get or create the JSONArray associated with the given key
+            JSONArray jsonArray;
+            if (existingJsonObject.has(fileName)) {
+                jsonArray = existingJsonObject.getJSONArray(fileName);
+            } else {
+                jsonArray = new JSONArray();
+            }
+
+            // Add the new JSON object to the array
+            jsonArray.put(newJsonObject);
+
+            // Update the JSON object with the modified array
+            existingJsonObject.put(fileName, jsonArray);
+
+            // Write the updated JSON object back to the file
+            FileWriter fileWriter = new FileWriter(file);
+            BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
+            bufferedWriter.write(existingJsonObject.toString());
+            bufferedWriter.close();
+
+        } catch (IOException | JSONException e) {
+            e.printStackTrace();
+        }
     }
 }
